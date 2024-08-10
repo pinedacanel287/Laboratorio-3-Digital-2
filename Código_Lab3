@@ -1,0 +1,99 @@
+const int ledPins[4] = {19, 18, 5, 17}; // Pines para los LEDs del contador
+const int ledPinsTemp[4] = {33, 14, 12, 13}; // Pines para los LEDs del contador
+const int incrementButtonPin = 25; // Pin para el botón de incrementar
+const int decrementButtonPin = 26; // Pin para el botón de decrementar
+const int AlarmPin = 21; // Pin para el LED de alarma
+const int ResetPin = 27; // Pin para reiniciar el timer
+int counter_binary = 0, counter_temp=0, Reset;
+
+// Variables para el debounce del botón
+unsigned long t_Boton = 0;
+unsigned long ultimo_t_Boton = 0;
+
+//Puntero para el temporizador
+hw_timer_t *Timer0_Cfg = NULL;
+
+//Función para sumar en los LEDs del contador
+void IRAM_ATTR SUMA() {
+  t_Boton = millis();
+  if (t_Boton - ultimo_t_Boton > 250) {
+    counter_binary++;
+    ultimo_t_Boton = t_Boton;
+  }
+}
+
+//Función para restar en los LEDs del contador
+void IRAM_ATTR RESTA() {
+  t_Boton = millis();
+  if (t_Boton - ultimo_t_Boton > 250) {
+    counter_binary--;
+    ultimo_t_Boton = t_Boton;
+  }
+}
+
+//Función que inicia cada 250ms por el temporizador
+void IRAM_ATTR Timer0_ISR()
+{
+    counter_temp++;
+    digitalWrite(AlarmPin, LOW);
+}
+
+void setup() {
+  // Configuración de los pines para los LEDs
+  for (int i = 0; i < 4; i++) {
+    pinMode(ledPins[i], OUTPUT);
+    pinMode(ledPinsTemp[i], OUTPUT);
+  }
+  // Configuración para los pines de botones y alarma
+  pinMode(incrementButtonPin, INPUT_PULLUP);
+  pinMode(decrementButtonPin, INPUT_PULLUP);
+  pinMode(AlarmPin, OUTPUT);
+  pinMode(ResetPin, INPUT_PULLUP);
+  Serial.begin(115200);
+  // Interupciones para los botones de suma y resta
+  attachInterrupt(incrementButtonPin, SUMA, FALLING);
+  attachInterrupt(decrementButtonPin, RESTA, FALLING);
+  Timer0_Cfg = timerBegin(0, 80, true);
+  timerAttachInterrupt(Timer0_Cfg, &Timer0_ISR, true);
+  timerAlarmWrite(Timer0_Cfg, 1000, true);
+  timerAlarmEnable(Timer0_Cfg);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  delay(10); // this speeds up the simulation
+
+  // Reseteo del contador binario si se sale del rango
+  if (counter_binary < 0 || counter_binary > 15) {
+    counter_binary=0;
+  }
+
+  Serial.println(digitalRead(ResetPin));
+
+  // Impresión en los pines del contador y el timer
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(ledPins[i], (counter_binary >> i) & 0x01);
+  }
+  for (int c = 0; c < 4; c++) {
+    digitalWrite(ledPinsTemp[c], (counter_temp >> c) & 0x01);
+  }
+  // If para que cuando los dos contadores sean iguales se encienda la alarma
+  // y el contador del temporizador se reinicie, el else apaga la alarma
+  // y aumenta el contador del temporizador
+  if (counter_binary == counter_temp) {
+    counter_temp = 0;
+    digitalWrite(AlarmPin, HIGH);
+  } else {
+    counter_temp++;
+    digitalWrite(AlarmPin, LOW);
+  }
+  // Cuando se presione el boton del reset el contador del temporizador se reinicia
+  // También reinicia la salida en los pines de los LEDs
+  Reset = digitalRead(ResetPin);
+  if (Reset == 0) {
+    counter_temp = 0;
+    for (int i = 0; i < 4; i++) {
+      digitalWrite(ledPinsTemp[i], LOW);
+    }
+  }
+}
